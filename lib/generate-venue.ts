@@ -1,33 +1,41 @@
-import { fal } from "@fal-ai/client";
-
-fal.config({
-  credentials: process.env.NEXT_PUBLIC_FAL_KEY
-});
+import { STABILITY_HOST, STABILITY_KEY } from "@/lib/constants";
 
 export async function generateVenueImage(venueDescription: string) {
   try {
-    const result = await fal.subscribe("rundiffusion-fal/juggernaut-flux/lightning", {
-      input: {
-        prompt: `Professional architectural photography: ${venueDescription}. Ultra-detailed, photorealistic, cinematic lighting, high-end venue photography, architectural visualization, interior design, 8k resolution.`,
+    const response = await fetch(`${STABILITY_HOST}/v1/generation/stable-diffusion-xl-1024-v1-0/text-to-image`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        Accept: 'application/json',
+        Authorization: `Bearer ${STABILITY_KEY}`,
       },
-      logs: true,
-      onQueueUpdate: (update) => {
-        if (update.status === "IN_PROGRESS") {
-          update.logs.map((log) => log.message).forEach(console.log);
-        }
-      },
+      body: JSON.stringify({
+        text_prompts: [
+          {
+            text: `Professional venue photography: ${venueDescription}. Photorealistic, architectural photography, detailed lighting, high-end interior design, 8k quality.`,
+            weight: 1,
+          },
+        ],
+        cfg_scale: 7,
+        height: 1024,
+        width: 1024,
+        steps: 50,
+        samples: 1,
+      }),
     });
 
-    console.log('FAL AI Response:', result);
-
-    if (!result.data?.images?.[0]) {
-      throw new Error("No image generated");
+    if (!response.ok) {
+      throw new Error(`Generation failed: ${response.statusText}`);
     }
+
+    const responseData = await response.json();
+    const generatedImage = responseData.artifacts[0].base64;
+    const imageUrl = `data:image/png;base64,${generatedImage}`;
 
     return {
       success: true,
-      imageUrl: result.data.images[0],
-      requestId: result.requestId
+      imageUrl,
+      requestId: responseData.artifacts[0].seed
     };
 
   } catch (error) {

@@ -276,13 +276,11 @@ export function Portfolio() {
               const publicUrl = await uploadImage(file);
               
               // Insert image record in the database
-              // Inside handleSubmit function, update the image insertion part
               const { error: imageError } = await providerSupabase
                 .from('portfolio_images')
                 .insert({
                   portfolio_id: currentPortfolioId,
                   image_url: publicUrl
-                  // Remove provider_id as it's not needed for the image record
                 });
 
               if (imageError) {
@@ -297,27 +295,26 @@ export function Portfolio() {
         );
 
         // Handle any failed uploads
-        // Inside handleSubmit function, update the failed uploads handling
         const failedUploads = uploadResults.filter(result => result.status === 'rejected');
         if (failedUploads.length > 0) {
-        // Log detailed error information for each failed upload
-        failedUploads.forEach((result, index) => {
-        if (result.status === 'rejected') {
-        console.error(`Failed upload ${index + 1}:`, {
-        error: result.reason,
-        message: result.reason instanceof Error ? result.reason.message : 'Unknown error',
-        name: result.reason instanceof Error ? result.reason.name : 'UnknownError',
-        stack: result.reason instanceof Error ? result.reason.stack : undefined
-        });
-        }
-        });
-        
-        // Show user-friendly error message
-        const errorMessages = failedUploads
-        .map(result => (result.reason instanceof Error ? result.reason.message : 'Unknown error'))
-        .join('\n');
-        
-        toast.error(`${failedUploads.length} images failed to upload:\n${errorMessages}`);
+          // Log detailed error information for each failed upload
+          failedUploads.forEach((result, index) => {
+            if (result.status === 'rejected') {
+              console.error(`Failed upload ${index + 1}:`, {
+                error: result.reason,
+                message: result.reason instanceof Error ? result.reason.message : 'Unknown error',
+                name: result.reason instanceof Error ? result.reason.name : 'UnknownError',
+                stack: result.reason instanceof Error ? result.reason.stack : undefined
+              });
+            }
+          });
+          
+          // Show user-friendly error message
+          const errorMessages = failedUploads
+            .map(result => (result.reason instanceof Error ? result.reason.message : 'Unknown error'))
+            .join('\n');
+          
+          toast.error(`${failedUploads.length} images failed to upload:\n${errorMessages}`);
         }
         
         // Clear uploaded images after successful upload

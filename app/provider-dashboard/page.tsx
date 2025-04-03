@@ -28,6 +28,18 @@ import { providerSupabase } from "@/lib/supabase2"; // Add this import
 import { toast } from "sonner";
 import  EventOverview  from "@/components/panels/provider/overview/page";
 import { Portfolio } from "@/components/panels/provider/portfolio/page";
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
+import {
+  ScrollArea,
+} from "@/components/ui/scroll-area"
+import {
+  Send,
+} from "lucide-react"
 
 export default function Dashboard() { // Change to default export
   const [activeTab, setActiveTab] = useState("overview");
@@ -217,9 +229,109 @@ export default function Dashboard() { // Change to default export
 
 // Update EventOverview component to include proper state and error handling
 
-
-
 function Messages() {
+  const [messages, setMessages] = useState<Message[]>([]);
+  const [conversations, setConversations] = useState<Conversation[]>([]);
+  const [newMessage, setNewMessage] = useState('');
+  const [loading, setLoading] = useState(true);
+  const [selectedConversation, setSelectedConversation] = useState<Conversation | null>(null);
+  const [providerId, setProviderId] = useState<string | null>(null);
+
+  useEffect(() => {
+    const fetchProviderId = async () => {
+      try {
+        const { data: { session } } = await providerSupabase.auth.getSession();
+        if (session?.user) {
+          setProviderId(session.user.id);
+          fetchConversations();
+        }
+      } catch (error) {
+        console.error('Error fetching provider ID:', error);
+      }
+    };
+
+    fetchProviderId();
+  }, []);
+
+  useEffect(() => {
+    if (selectedConversation && providerId) {
+      fetchMessages();
+    }
+  }, [selectedConversation, providerId]);
+
+  const fetchConversations = async () => {
+    if (!providerId) return;
+
+    try {
+      const response = await fetch(`/api/messages?userId=${providerId}&userType=provider`);
+      if (!response.ok) throw new Error('Failed to fetch conversations');
+      const data = await response.json();
+      setConversations(data);
+    } catch (error) {
+      console.error('Error fetching conversations:', error);
+      toast.error('Failed to load conversations');
+    }
+  };
+
+  const fetchMessages = async () => {
+    if (!selectedConversation || !providerId) return;
+
+    try {
+      const response = await fetch(
+        `/api/messages?userId=${providerId}&conversationId=${selectedConversation.id}&userType=provider`
+      );
+      if (!response.ok) throw new Error('Failed to fetch messages');
+      const data = await response.json();
+      setMessages(data);
+    } catch (error) {
+      console.error('Error fetching messages:', error);
+      toast.error('Failed to load messages');
+    }
+  };
+
+  const handleSendMessage = async (e: React.FormEvent) => {
+    e.preventDefault();
+    if (!newMessage.trim() || !selectedConversation || !providerId) return;
+
+    try {
+      const response = await fetch('/api/messages', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          sender_id: providerId,
+          receiver_id: selectedConversation.id,
+          content: newMessage.trim(),
+          sender_type: 'provider'
+        }),
+      });
+
+      if (!response.ok) throw new Error('Failed to send message');
+      
+      const newMessage = await response.json();
+      setMessages(prev => [...prev, newMessage]);
+      setNewMessage('');
+      toast.success('Message sent');
+    } catch (error) {
+      console.error('Error sending message:', error);
+      toast.error('Failed to send message');
+    }
+  };
+
+  if (loading) {
+    return (
+      <div className="space-y-6">
+        <h2 className="text-2xl font-bold text-foreground">Messages</h2>
+        <Card className="p-6">
+          <div className="text-center py-8">
+            <p className="text-muted-foreground">Loading messages...</p>
+          </div>
+        </Card>
+      </div>
+    );
+  }
+
   return (
     <div className="space-y-6">
       <div className="flex flex-col md:flex-row gap-4 md:items-center justify-between">
@@ -232,50 +344,46 @@ function Messages() {
           <TabsTrigger value="notifications">Notifications</TabsTrigger>
         </TabsList>
         <TabsContent value="messages" className="space-y-4 pt-4">
-          <Card>
-            <CardHeader className="pb-2">
-              <div className="flex justify-between">
-                <div>
-                  <CardTitle>Sarah Johnson</CardTitle>
-                  <CardDescription>Wedding Photography • March 15, 2025</CardDescription>
+          {conversations.length === 0 ? (
+            <Card>
+              <CardContent className="p-6">
+                <div className="text-center">
+                  <MessageSquare className="h-12 w-12 mx-auto text-muted-foreground/50 mb-4" />
+                  <p className="text-muted-foreground">No conversations yet</p>
                 </div>
-                <Badge>New</Badge>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p>
-                Hi there! I wanted to discuss some details about our wedding photography package. Do you have time for a
-                quick call tomorrow?
-              </p>
-            </CardContent>
-            <CardFooter className="pt-0">
-              <Button variant="outline" className="w-full">
-                Reply
-              </Button>
-            </CardFooter>
-          </Card>
-
-          <Card>
-            <CardHeader className="pb-2">
-              <div className="flex justify-between">
-                <div>
-                  <CardTitle>Mark Davis</CardTitle>
-                  <CardDescription>Corporate Event • April 10, 2025</CardDescription>
-                </div>
-              </div>
-            </CardHeader>
-            <CardContent>
-              <p>
-                Thanks for confirming the details. I've sent over the contract for you to review. Let me know if you
-                have any questions!
-              </p>
-            </CardContent>
-            <CardFooter className="pt-0">
-              <Button variant="outline" className="w-full">
-                Reply
-              </Button>
-            </CardFooter>
-          </Card>
+              </CardContent>
+            </Card>
+          ) : (
+            conversations.map((conversation) => (
+              <Card key={conversation.id}>
+                <CardHeader className="pb-2">
+                  <div className="flex justify-between">
+                    <div>
+                      <CardTitle>User {conversation.id}</CardTitle>
+                      <CardDescription>
+                        {new Date(conversation.lastMessageTime).toLocaleString()}
+                      </CardDescription>
+                    </div>
+                    {conversation.unreadCount > 0 && (
+                      <Badge>New</Badge>
+                    )}
+                  </div>
+                </CardHeader>
+                <CardContent>
+                  <p>{conversation.lastMessage}</p>
+                </CardContent>
+                <CardFooter className="pt-0">
+                  <Button 
+                    variant="outline" 
+                    className="w-full"
+                    onClick={() => setSelectedConversation(conversation)}
+                  >
+                    View Conversation
+                  </Button>
+                </CardFooter>
+              </Card>
+            ))
+          )}
         </TabsContent>
         <TabsContent value="notifications" className="space-y-4 pt-4">
           <Card>
@@ -321,8 +429,57 @@ function Messages() {
           </Card>
         </TabsContent>
       </Tabs>
+
+      {selectedConversation && (
+        <Dialog open={!!selectedConversation} onOpenChange={() => setSelectedConversation(null)}>
+          <DialogContent className="max-w-2xl">
+            <DialogHeader>
+              <DialogTitle>Conversation with User {selectedConversation.id}</DialogTitle>
+            </DialogHeader>
+            <ScrollArea className="h-[400px] pr-4">
+              {messages.map((message) => (
+                <div
+                  key={message.id}
+                  className={`flex items-start gap-3 mb-4 ${
+                    message.sender_id === providerId ? 'flex-row-reverse' : ''
+                  }`}
+                >
+                  <Avatar className="h-8 w-8">
+                    <AvatarFallback>
+                      {message.sender_id === providerId ? 'P' : 'U'}
+                    </AvatarFallback>
+                  </Avatar>
+                  <div
+                    className={`rounded-lg p-3 max-w-[70%] ${
+                      message.sender_id === providerId
+                        ? 'bg-primary text-primary-foreground'
+                        : 'bg-muted'
+                    }`}
+                  >
+                    <p className="text-sm">{message.content}</p>
+                    <span className="text-xs opacity-70 mt-1 block">
+                      {new Date(message.created_at).toLocaleTimeString()}
+                    </span>
+                  </div>
+                </div>
+              ))}
+            </ScrollArea>
+            <form onSubmit={handleSendMessage} className="flex gap-2">
+              <Input
+                value={newMessage}
+                onChange={(e) => setNewMessage(e.target.value)}
+                placeholder="Type your message..."
+                className="flex-1"
+              />
+              <Button type="submit" size="icon">
+                <Send className="h-4 w-4" />
+              </Button>
+            </form>
+          </DialogContent>
+        </Dialog>
+      )}
     </div>
-  )
+  );
 }
 
 function Payment() {
